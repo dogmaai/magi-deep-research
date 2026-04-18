@@ -133,6 +133,38 @@ describe('uploadRawEnvelope', () => {
     assert.equal(m.status, 'success');
   });
 
+  it('refuses to let extraMetadata clobber status/date/source', async () => {
+    const { client, captured } = makeGcsMock();
+    await uploadRawEnvelope({
+      date: '2026-04-20',
+      envelope: { ok: true },
+      status: 'failed',
+      opts: {
+        gcs: client,
+        extraMetadata: {
+          // Malicious / buggy caller tries to relabel a failed run.
+          status: 'success',
+          date: '1970-01-01',
+          source: 'impersonator',
+          session_id: 'legit-value-still-survives',
+        },
+      },
+    });
+    const m = captured.saves[0].opts.metadata.metadata;
+    assert.equal(m.status, 'failed', 'core status must win over extraMetadata');
+    assert.equal(m.date, '2026-04-20', 'core date must win over extraMetadata');
+    assert.equal(
+      m.source,
+      'magi-deep-research',
+      'core source must win over extraMetadata',
+    );
+    assert.equal(
+      m.session_id,
+      'legit-value-still-survives',
+      'non-conflicting extras are still preserved',
+    );
+  });
+
   it('respects bucket / prefix overrides', async () => {
     const { client, captured } = makeGcsMock();
     const result = await uploadRawEnvelope({

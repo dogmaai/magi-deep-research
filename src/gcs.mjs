@@ -131,10 +131,13 @@ export async function uploadRawEnvelope({
   const metadata = {
     contentType: 'application/json',
     metadata: {
+      // Spread extras FIRST so the core keys below always win — we
+      // never want a caller to be able to clobber status/date/source
+      // via extraMetadata (e.g. marking a failed run as success).
+      ...(extraMetadata ?? {}),
       status,
       date,
       source: 'magi-deep-research',
-      ...(extraMetadata ?? {}),
     },
   };
 
