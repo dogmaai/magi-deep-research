@@ -68,7 +68,7 @@ export const MODE = Object.freeze({
  * @param {(date: Date) => string} [opts.deps.etDateString]
  * @param {(args: {dateIso: string}) => Promise<string>} [opts.deps.generateFallback]
  * @param {(args: {dateIso: string}) => Promise<string>} [opts.deps.generateDeepResearch]
- * @param {(markdown: string) => {stripped: string, status: string, tickerLeakCount?: number}} [opts.deps.stripSection5]
+ * @param {(markdown: string) => {stripped: string, status: string, tickersRemaining?: number, tickerSamples?: string[]}} [opts.deps.stripSection5]
  * @param {(row: import('./bigquery.mjs').DeepResearchRow, opts?: object) => Promise<boolean>} [opts.deps.writeMarketResearch]
  * @param {(args: object) => Promise<{ok: boolean, gcsUri: string}>} [opts.deps.uploadRawEnvelope]
  * @param {(args: object) => Promise<{ok: boolean, fileId: string|null, boxUrl: string|null}>} [opts.deps.uploadBrief]
@@ -159,32 +159,41 @@ export async function runJob({
   // §3. Section 5 strip. Absolute boundary (§2.3): Section 5 never
   // flows into BigQuery or Box. The raw envelope going to GCS is
   // deliberately pre-strip (Jun-only bucket).
-  const { stripped, status: stripStatus, tickerLeakCount } = stripSection5Fn(rawMarkdown);
+  const { stripped, status: stripStatus, tickersRemaining } = stripSection5Fn(rawMarkdown);
   const overallStatus =
     stripStatus === 'partial' ? STATUS.PARTIAL : STATUS.SUCCESS;
 
-  // §4. Fan-out. Each writer is best-effort; we collect results
-  // without letting one failure block the others. The row still
-  // goes in even if GCS / Box fail, so the PLM sees the brief.
-  const gcsPromise = uploadRawEnvelopeFn({
-    date,
-    envelope: {
+  // §4. Fan-out. Each writer is isolated in its own try/catch so an
+  // unexpected throw in one leg does NOT skip the others — this is
+  // the design §5.5 "partial" guarantee. Each module already returns
+  // `{ ok: false }` on transport errors; these try/catch blocks are
+  // defensive coverage for the narrower case where an injected or
+  // future implementation throws unexpectedly. GCS and Box are
+  // independent so we launch them in parallel, then await both
+  // before composing the BigQuery row (which needs their URIs).
+  const gcsResult = await settleFanOut('gcs', () =>
+    uploadRawEnvelopeFn({
       date,
-      mode,
-      sourceAgent,
-      raw: rawMarkdown,
-      promptVersion,
-    },
-    status: overallStatus,
-  });
-  const gcsResult = await gcsPromise;
-
-  const boxResult = await uploadBriefFn({
-    date,
-    markdown: stripped,
-    status: overallStatus,
-    opts: {},
-  });
+      envelope: {
+        date,
+        mode,
+        sourceAgent,
+        raw: rawMarkdown,
+        promptVersion,
+      },
+      status: overallStatus,
+    }),
+    { ok: false, gcsUri: null, objectName: null },
+  );
+  const boxResult = await settleFanOut('box', () =>
+    uploadBriefFn({
+      date,
+      markdown: stripped,
+      status: overallStatus,
+      opts: {},
+    }),
+    { ok: false, fileId: null, fileName: null, boxUrl: null },
+  );
 
   const row = buildDeepResearchRow({
     date,
@@ -197,7 +206,7 @@ export async function runJob({
     boxUrl: boxResult?.boxUrl ?? null,
     executionDurationSec: Math.round((Date.now() - startedAt) / 1000),
   });
-  const bqOk = await writeMarketResearchFn(row);
+  const bqOk = await settleFanOut('bigquery', () => writeMarketResearchFn(row), false);
 
   const ok = bqOk && (gcsResult?.ok ?? false) && (boxResult?.ok ?? false);
   return {
@@ -206,12 +215,36 @@ export async function runJob({
     date,
     mode,
     sourceAgent,
-    tickerLeakCount: tickerLeakCount ?? 0,
+    tickersRemaining: tickersRemaining ?? 0,
     durationSec: row.execution_duration_sec,
     bigquery: { ok: bqOk },
     gcs: gcsResult,
     box: boxResult,
   };
+}
+
+/**
+ * Fan-out leg runner: invokes `fn` and converts any thrown exception
+ * into `fallback`. The individual writers already return
+ * `{ ok: false }` on transport errors, so this is only hit when a
+ * writer (or its DI replacement) throws unexpectedly.
+ *
+ * @template T
+ * @param {string} label
+ * @param {() => Promise<T>} fn
+ * @param {T} fallback
+ * @returns {Promise<T>}
+ */
+async function settleFanOut(label, fn, fallback) {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(
+      `[deep-research-job] ${label} leg threw unexpectedly:`,
+      err instanceof Error ? err.message : err,
+    );
+    return fallback;
+  }
 }
 
 /**
@@ -247,7 +280,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
  * @property {string} [sourceAgent]
  * @property {string} [reason]
  * @property {string} [error]
- * @property {number} [tickerLeakCount]
+ * @property {number} [tickersRemaining]
  * @property {number} durationSec
  * @property {{ok: boolean} | null} bigquery
  * @property {{ok: boolean, gcsUri: string} | null} gcs

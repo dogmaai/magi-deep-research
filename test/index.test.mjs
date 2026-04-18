@@ -32,7 +32,8 @@ function makeDeps(overrides = {}) {
     stripSection5: (md) => ({
       stripped: md.replace(/## 5\. Jun Review Only[\s\S]*$/m, '').trim() + '\n',
       status: 'success',
-      tickerLeakCount: 0,
+      tickersRemaining: 0,
+      tickerSamples: [],
     }),
     writeMarketResearch: async (row) => {
       captured.bqRows.push(row);
@@ -117,13 +118,65 @@ describe('runJob', () => {
       stripSection5: (md) => ({
         stripped: md.replace(/## 5\. Jun Review Only[\s\S]*$/m, '').trim() + '\n',
         status: 'partial',
-        tickerLeakCount: 3,
+        tickersRemaining: 3,
+        tickerSamples: ['$AAPL', '$MSFT', '$NVDA'],
       }),
     });
     const result = await runJob({ deps });
     assert.equal(result.status, STATUS.PARTIAL);
-    assert.equal(result.tickerLeakCount, 3);
+    assert.equal(result.tickersRemaining, 3);
     assert.equal(captured.bqRows[0].status, STATUS.PARTIAL);
+  });
+
+  it('still writes BQ + Box when the GCS leg throws unexpectedly (§5.5 partial)', async () => {
+    const { deps, captured } = makeDeps({
+      uploadRawEnvelope: async () => {
+        throw new Error('simulated ADC failure');
+      },
+    });
+    const result = await runJob({ deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.gcs.ok, false);
+    assert.equal(result.gcs.gcsUri, null);
+    assert.equal(result.box.ok, true);
+    assert.equal(result.bigquery.ok, true);
+    assert.equal(captured.bqRows.length, 1);
+    assert.equal(captured.boxCalls.length, 1);
+    // BQ row records the Box URI even though GCS failed.
+    assert.equal(captured.bqRows[0].gcs_uri, null);
+    assert.equal(captured.bqRows[0].box_file_id, 'box-file-1');
+  });
+
+  it('still writes BQ + GCS when the Box leg throws unexpectedly (§5.5 partial)', async () => {
+    const { deps, captured } = makeDeps({
+      uploadBrief: async () => {
+        throw new Error('simulated Box JWT expiry');
+      },
+    });
+    const result = await runJob({ deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.box.ok, false);
+    assert.equal(result.box.fileId, null);
+    assert.equal(result.gcs.ok, true);
+    assert.equal(result.bigquery.ok, true);
+    assert.equal(captured.bqRows.length, 1);
+    assert.equal(captured.gcsCalls.length, 1);
+  });
+
+  it('still returns a structured result when the BQ write throws unexpectedly (§5.5 partial)', async () => {
+    const { deps, captured } = makeDeps({
+      writeMarketResearch: async () => {
+        throw new Error('simulated streaming buffer full');
+      },
+    });
+    const result = await runJob({ deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.bigquery.ok, false);
+    assert.equal(result.gcs.ok, true);
+    assert.equal(result.box.ok, true);
+    // GCS + Box calls still happened.
+    assert.equal(captured.gcsCalls.length, 1);
+    assert.equal(captured.boxCalls.length, 1);
   });
 
   it('returns {ok:false, status:failed} when brief generation throws', async () => {
