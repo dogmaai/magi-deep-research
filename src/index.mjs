@@ -171,29 +171,35 @@ export async function runJob({
   // future implementation throws unexpectedly. GCS and Box are
   // independent so we launch them in parallel, then await both
   // before composing the BigQuery row (which needs their URIs).
-  const gcsResult = await settleFanOut('gcs', () =>
-    uploadRawEnvelopeFn({
-      date,
-      envelope: {
-        date,
-        mode,
-        sourceAgent,
-        raw: rawMarkdown,
-        promptVersion,
-      },
-      status: overallStatus,
-    }),
-    { ok: false, gcsUri: null, objectName: null },
-  );
-  const boxResult = await settleFanOut('box', () =>
-    uploadBriefFn({
-      date,
-      markdown: stripped,
-      status: overallStatus,
-      opts: {},
-    }),
-    { ok: false, fileId: null, fileName: null, boxUrl: null },
-  );
+  const [gcsResult, boxResult] = await Promise.all([
+    settleFanOut(
+      'gcs',
+      () =>
+        uploadRawEnvelopeFn({
+          date,
+          envelope: {
+            date,
+            mode,
+            sourceAgent,
+            raw: rawMarkdown,
+            promptVersion,
+          },
+          status: overallStatus,
+        }),
+      { ok: false, gcsUri: null, objectName: null },
+    ),
+    settleFanOut(
+      'box',
+      () =>
+        uploadBriefFn({
+          date,
+          markdown: stripped,
+          status: overallStatus,
+          opts: {},
+        }),
+      { ok: false, fileId: null, fileName: null, boxUrl: null },
+    ),
+  ]);
 
   const row = buildDeepResearchRow({
     date,
