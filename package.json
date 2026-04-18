@@ -17,5 +17,8 @@
   },
   "author": "MAGI",
   "license": "UNLICENSED",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "nyse-holidays": "^1.2.0"
+  }
 }
