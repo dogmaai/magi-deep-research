@@ -3,8 +3,13 @@ name: Node Test
 on:
   push:
     branches: [main]
+  # Trigger on every PR, not just those targeting main. Stacked PRs
+  # (where PR B is based on PR A's branch) are a routine part of this
+  # repo's workflow — future Phase B/C modules (fallback.mjs,
+  # box.mjs, bigquery.mjs, gcs.mjs, deep-research.mjs) will often be
+  # opened on top of each other. Without this, the stacked PR's tests
+  # never run until the base PR merges.
   pull_request:
-    branches: [main]
 
 # Cancel superseded runs on the same branch so a rapid push sequence does not
 # queue up redundant test jobs.
