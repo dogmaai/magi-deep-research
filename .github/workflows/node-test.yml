@@ -1,0 +1,48 @@
+name: Node Test
+
+on:
+  push:
+    branches: [main]
+  # Trigger on every PR, not just those targeting main. Stacked PRs
+  # (where PR B is based on PR A's branch) are a routine part of this
+  # repo's workflow — future Phase B/C modules (fallback.mjs,
+  # box.mjs, bigquery.mjs, gcs.mjs, deep-research.mjs) will often be
+  # opened on top of each other. Without this, the stacked PR's tests
+  # never run until the base PR merges.
+  pull_request:
+
+# Cancel superseded runs on the same branch so a rapid push sequence does not
+# queue up redundant test jobs.
+concurrency:
+  group: node-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: node --test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The design pins Node 20 ESM (see MAGI-GE-DESIGN-001-v2 §3.1). Node 22
+        # is added as a forward-compatibility signal: the built-in node:test
+        # runner is stable on both, and catching breakage early on 22 avoids
+        # surprises when the Cloud Run base image is bumped.
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Intentionally no `npm ci` here: this repository has zero runtime and
+      # zero test dependencies today. `node:test` and `node:assert/strict` are
+      # built-in. When Phase B / C modules land with real dependencies, the
+      # step below should be replaced with `npm ci`.
+      - name: Run tests
+        run: npm test
