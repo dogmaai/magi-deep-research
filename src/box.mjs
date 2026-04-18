@@ -80,17 +80,20 @@ function defaultSleep(ms) {
  * (auth, folder not found, quota exceeded) are surfaced to the
  * caller via `{ ok: false, reason }`.
  *
- * The Box SDK client must expose `files.uploadFile(folderId, name,
- * contentBuffer)` → `{ entries: [{ id, name }] } | { id, name }`.
- * This matches the `box-node-sdk` v3.x `BoxClient` surface.
+ * The Box SDK client must expose the v10 UploadsManager surface:
+ *   `client.uploads.uploadFile({ attributes: { name, parent: { id }},
+ *                                file: Buffer|Stream })` →
+ *   `{ entries: [{ id, name, ... }] } | { id, name }`.
+ * This matches `box-node-sdk@^10.x` (NOT the v2/v3 FilesManager API,
+ * where `client.files.uploadFile(folderId, name, buffer)` lived).
  *
  * @param {Object} args
  * @param {string} args.date            - YYYY-MM-DD (ET).
  * @param {string} args.markdown        - stripSection5 output (REQUIRED post-strip).
  * @param {'success'|'partial'|'failed'} args.status
  * @param {Object} [args.opts]
- * @param {{ files: { uploadFile: Function, update?: Function } }} [args.opts.box]
- *   - Injectable Box client (BoxClient-shaped).
+ * @param {{ uploads: { uploadFile: Function } }} [args.opts.box]
+ *   - Injectable Box client exposing v10 UploadsManager.
  * @param {string} [args.opts.folderId]  - Overrides DEFAULT_FOLDER_ID.
  * @param {number} [args.opts.maxRetries=3]
  * @param {number} [args.opts.backoffMs=1000]
@@ -127,9 +130,9 @@ export async function uploadBrief({
     );
     return empty;
   }
-  if (!box || !box.files || typeof box.files.uploadFile !== 'function') {
+  if (!box || !box.uploads || typeof box.uploads.uploadFile !== 'function') {
     console.error(
-      '[deep-research-box] missing Box client — pass opts.box (box-node-sdk BoxClient-shaped)',
+      '[deep-research-box] missing Box client — pass opts.box (box-node-sdk v10 BoxClient exposing uploads.uploadFile)',
     );
     return empty;
   }
@@ -138,7 +141,10 @@ export async function uploadBrief({
 
   for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
     try {
-      const response = await box.files.uploadFile(folderId, fileName, body);
+      const response = await box.uploads.uploadFile({
+        attributes: { name: fileName, parent: { id: folderId } },
+        file: body,
+      });
       const entry = unwrapUploadResponse(response);
       if (!entry || typeof entry.id !== 'string') {
         console.error(

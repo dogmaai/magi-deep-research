@@ -14,10 +14,14 @@ function makeBoxMock({ outcomes = [{ type: 'ok' }] } = {}) {
     calls: [],
   };
   let attempt = 0;
+  // box-node-sdk v10 surface: client.uploads.uploadFile({ attributes, file })
   const client = {
-    files: {
-      async uploadFile(folderId, name, body) {
-        captured.calls.push({ folderId, name, body });
+    uploads: {
+      async uploadFile(requestBody) {
+        const { attributes, file } = requestBody ?? {};
+        const folderId = attributes?.parent?.id;
+        const name = attributes?.name;
+        captured.calls.push({ folderId, name, body: file, requestBody });
         const outcome = outcomes[attempt] ?? outcomes[outcomes.length - 1];
         attempt += 1;
         if (outcome.type === 'ok') {
