@@ -1,0 +1,21 @@
+{
+  "name": "magi-deep-research",
+  "version": "0.1.0",
+  "description": "Gemini Enterprise Deep Research Agent writer for MAGI (MAGI-GE-DESIGN-001-v2).",
+  "type": "module",
+  "main": "src/index.mjs",
+  "scripts": {
+    "test": "node --test 'test/*.test.mjs'",
+    "start": "node src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dogmaai/magi-deep-research.git"
+  },
+  "author": "MAGI",
+  "license": "UNLICENSED",
+  "private": true
+}
