@@ -39,10 +39,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          cache: npm
 
-      # Intentionally no `npm ci` here: this repository has zero runtime and
-      # zero test dependencies today. `node:test` and `node:assert/strict` are
-      # built-in. When Phase B / C modules land with real dependencies, the
-      # step below should be replaced with `npm ci`.
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run tests
         run: npm test
