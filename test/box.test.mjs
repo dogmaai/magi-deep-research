@@ -179,6 +179,27 @@ describe('uploadBrief', () => {
     assert.equal(captured.calls.length, 0);
   });
 
+  it('refuses §-renumbered Jun-only headings and sentinel fences (§2.3 guard)', async () => {
+    const cases = [
+      STRIPPED + '## §8. Jun Review Only (CONFIDENTIAL)\nAAPL LONG 190 185 210\n',
+      STRIPPED +
+        '<!--MAGI:SECTION5:BEGIN-->\n## §5. Jun限定\nAAPL LONG 1 2 3\n<!--MAGI:SECTION5:END-->\n',
+    ];
+    for (const withS5 of cases) {
+      const { client, captured } = makeBoxMock();
+      await assert.rejects(
+        () =>
+          uploadBrief({
+            ...BASE,
+            markdown: withS5,
+            opts: { box: client, folderId: '12345' },
+          }),
+        /absolute-boundary/,
+      );
+      assert.equal(captured.calls.length, 0);
+    }
+  });
+
   it('rejects invalid status values', async () => {
     await assert.rejects(
       () =>

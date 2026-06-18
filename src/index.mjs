@@ -68,7 +68,7 @@ export const MODE = Object.freeze({
  * @param {(date: Date) => string} [opts.deps.etDateString]
  * @param {(args: {dateIso: string}) => Promise<string>} [opts.deps.generateFallback]
  * @param {(args: {dateIso: string}) => Promise<string>} [opts.deps.generateDeepResearch]
- * @param {(markdown: string) => {stripped: string, status: string, tickersRemaining?: number, tickerSamples?: string[]}} [opts.deps.stripSection5]
+ * @param {(markdown: string) => {stripped: string, status: string, tickersRemaining?: number, tickerSamples?: string[], leakSuspected?: boolean, leakSamples?: string[], section5Removed?: boolean}} [opts.deps.stripSection5]
  * @param {(row: import('./bigquery.mjs').DeepResearchRow, opts?: object) => Promise<boolean>} [opts.deps.writeMarketResearch]
  * @param {(args: object) => Promise<{ok: boolean, gcsUri: string}>} [opts.deps.uploadRawEnvelope]
  * @param {(args: object) => Promise<{ok: boolean, fileId: string|null, boxUrl: string|null}>} [opts.deps.uploadBrief]
@@ -159,9 +159,22 @@ export async function runJob({
   // §3. Section 5 strip. Absolute boundary (§2.3): Section 5 never
   // flows into BigQuery or Box. The raw envelope going to GCS is
   // deliberately pre-strip (Jun-only bucket).
-  const { stripped, status: stripStatus, tickersRemaining } = stripSection5Fn(rawMarkdown);
+  const {
+    stripped,
+    status: stripStatus,
+    tickersRemaining,
+    leakSuspected,
+    leakSamples,
+  } = stripSection5Fn(rawMarkdown);
   const overallStatus =
     stripStatus === 'partial' ? STATUS.PARTIAL : STATUS.SUCCESS;
+  if (leakSuspected) {
+    console.warn(
+      `[deep-research-job] ${date} Section 5 leak suspected after strip — ` +
+        `${(leakSamples ?? []).length} actionable-pick line(s) survived. ` +
+        `Marking status=partial. Samples: ${JSON.stringify((leakSamples ?? []).slice(0, 3))}`,
+    );
+  }
 
   // §4. Fan-out. Each writer is isolated in its own try/catch so an
   // unexpected throw in one leg does NOT skip the others — this is
@@ -222,6 +235,7 @@ export async function runJob({
     mode,
     sourceAgent,
     tickersRemaining: tickersRemaining ?? 0,
+    leakSuspected: leakSuspected ?? false,
     durationSec: row.execution_duration_sec,
     bigquery: { ok: bqOk },
     gcs: gcsResult,
@@ -287,6 +301,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
  * @property {string} [reason]
  * @property {string} [error]
  * @property {number} [tickersRemaining]
+ * @property {boolean} [leakSuspected]
  * @property {number} durationSec
  * @property {{ok: boolean} | null} bigquery
  * @property {{ok: boolean, gcsUri: string} | null} gcs

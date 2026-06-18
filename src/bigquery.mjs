@@ -37,6 +37,7 @@
  */
 
 import { BigQuery } from '@google-cloud/bigquery';
+import { containsSection5 } from './strip.mjs';
 
 export const DEFAULT_PROJECT =
   process.env.GOOGLE_CLOUD_PROJECT || 'screen-share-459802';
@@ -87,11 +88,12 @@ function assertStripped(summary) {
       'bigquery.mjs: row.summary must be a string (stripSection5 output)',
     );
   }
-  if (/^## 5\. Jun Review Only\b/m.test(summary)) {
+  if (containsSection5(summary)) {
     throw new Error(
-      'bigquery.mjs: row.summary still contains "## 5. Jun Review Only". ' +
-        'Call stripSection5() before writeMarketResearch(). ' +
-        'This is a MAGI-GE-DESIGN-001-v2 §2.3 absolute-boundary violation.',
+      'bigquery.mjs: row.summary still contains Section 5 (Jun Review Only ' +
+        'heading or sentinel fence). Call stripSection5() before ' +
+        'writeMarketResearch(). This is a MAGI-GE-DESIGN-001-v2 §2.3 ' +
+        'absolute-boundary violation.',
     );
   }
 }

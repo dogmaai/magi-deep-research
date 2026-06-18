@@ -28,6 +28,10 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import {
+  SECTION5_SENTINEL_BEGIN,
+  SECTION5_SENTINEL_END,
+} from './strip.mjs';
 
 /**
  * Default Vertex AI project / location. The Cloud Run Job
@@ -80,11 +84,12 @@ export function buildPrompt({ dateIso, tickerUniverse } = {}) {
     'AAPL', 'AMZN', 'MSFT', 'META', 'NVDA', 'TSLA', 'GOOGL', 'OXY', 'SPY',
   ];
 
-  // NOTE: the exact H2 headings (e.g. "## 5. Jun Review Only") are
-  // load-bearing — `stripSection5()` matches `/^## 5\. Jun Review
-  // Only\b/` and `test/prompt-contract.test.mjs` will assert all five
-  // section headings round-trip unchanged through the LLM. Do not
-  // reword them in this prompt without updating both sites.
+  // NOTE: the five H2 headings and the Section 5 sentinel fence are
+  // load-bearing. `stripSection5()` removes Section 5 via the sentinel
+  // fence (primary) and the "Jun Review Only" heading label (fallback),
+  // and `test/prompt-contract.test.mjs` asserts both the headings and
+  // the sentinels round-trip through the LLM. Do not reword the Section
+  // 5 heading or the sentinel lines without updating `src/strip.mjs`.
   return [
     `You are MAGI's morning market-research analyst. Produce a Deep Research brief for the US equity session on ${date} (ET).`,
     '',
@@ -112,7 +117,9 @@ export function buildPrompt({ dateIso, tickerUniverse } = {}) {
     '',
     `\`## 5. Jun Review Only\` — CONFIDENTIAL. Actionable ticker picks for today, drawn from the MAGI universe (${universe.join(', ')}). For each pick provide on one line: ticker, direction (LONG / SHORT), entry price, stop loss, target price, and a one-sentence thesis. Aim for 1-3 picks. This section is stripped before the brief reaches any downstream LLM; everything here is for Jun only.`,
     '',
-    'Return ONLY the markdown body with the five H2 sections. No code fences, no JSON wrapper.',
+    `SECTION 5 SENTINEL FENCE — REQUIRED: wrap Section 5 so it can be removed mechanically regardless of wording, numbering, or language. Output the exact line \`${SECTION5_SENTINEL_BEGIN}\` on its own line immediately BEFORE the \`## 5. Jun Review Only\` heading, and the exact line \`${SECTION5_SENTINEL_END}\` on its own line immediately AFTER Section 5's last line. Emit both sentinels verbatim even if Section 5 is empty.`,
+    '',
+    'Return ONLY the markdown body with the five H2 sections (Section 5 wrapped in its sentinel fence). No code fences, no JSON wrapper.',
   ].join('\n');
 }
 
