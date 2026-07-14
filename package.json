@@ -20,9 +20,11 @@
   "private": true,
   "dependencies": {
     "@google-cloud/bigquery": "^8.1.1",
+    "@google-cloud/discoveryengine": "^2.8.0",
     "@google-cloud/storage": "^7.19.0",
     "@google/genai": "^1.50.1",
     "box-node-sdk": "^10.6.0",
+    "google-auth-library": "^10.6.2",
     "nyse-holidays": "^1.2.0"
   }
 }

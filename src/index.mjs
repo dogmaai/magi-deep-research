@@ -27,6 +27,7 @@
 
 import { etDateString, isTradingDay } from './nyse.mjs';
 import { generateDeepBrief } from './fallback.mjs';
+import { generateDeepResearch as realGenerateDeepResearch } from './deep-research.mjs';
 import { stripSection5 } from './strip.mjs';
 import {
   SOURCE_AGENT,
@@ -84,7 +85,7 @@ export async function runJob({
     isTradingDay: isTradingDayFn = isTradingDay,
     etDateString: etDateStringFn = etDateString,
     generateFallback = (args) => generateDeepBrief(args),
-    generateDeepResearch,
+    generateDeepResearch = realGenerateDeepResearch,
     stripSection5: stripSection5Fn = stripSection5,
     writeMarketResearch: writeMarketResearchFn = writeMarketResearch,
     uploadRawEnvelope: uploadRawEnvelopeFn = uploadRawEnvelope,
@@ -120,14 +121,16 @@ export async function runJob({
   // (enforced structurally by `test/prompt-contract.test.mjs`).
   let rawMarkdown;
   let sourceAgent;
+  let sessionId = null;
   try {
     if (mode === MODE.DEEP_RESEARCH) {
-      if (typeof generateDeepResearch !== 'function') {
-        throw new Error(
-          'index.mjs: mode=deep-research requires deps.generateDeepResearch — not yet wired (allowlist pending).',
-        );
+      const deepResult = await generateDeepResearch({ dateIso: date });
+      if (deepResult && typeof deepResult === 'object') {
+        rawMarkdown = deepResult.markdown;
+        sessionId = deepResult.sessionId ?? null;
+      } else {
+        rawMarkdown = deepResult;
       }
-      rawMarkdown = await generateDeepResearch({ dateIso: date });
       sourceAgent = SOURCE_AGENT.GEMINI_ENTERPRISE;
     } else if (mode === MODE.FALLBACK) {
       rawMarkdown = await generateFallback({ dateIso: date });
@@ -210,6 +213,7 @@ export async function runJob({
     gcsUri: gcsResult?.gcsUri ?? null,
     boxFileId: boxResult?.fileId ?? null,
     boxUrl: boxResult?.boxUrl ?? null,
+    sessionId,
     executionDurationSec: Math.round((Date.now() - startedAt) / 1000),
   });
   const bqOk = await settleFanOut('bigquery', () => writeMarketResearchFn(row), false);
