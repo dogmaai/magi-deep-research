@@ -222,12 +222,16 @@ describe('runJob', () => {
     assert.match(result.error, /unknown mode/);
   });
 
-  it('fails deep-research mode with a clear error when generateDeepResearch is not wired', async () => {
-    const { deps } = makeDeps();
+  it('fails deep-research mode when generateDeepResearch throws', async () => {
+    const { deps } = makeDeps({
+      generateDeepResearch: async () => {
+        throw new Error('GE_ENGINE_ID is required to call streamAssist');
+      },
+    });
     const result = await runJob({ deps, mode: MODE.DEEP_RESEARCH });
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'brief_generation_failed');
-    assert.match(result.error, /allowlist pending/);
+    assert.match(result.error, /GE_ENGINE_ID is required/);
   });
 
   it('uses generateDeepResearch when provided and marks sourceAgent=gemini_enterprise', async () => {
