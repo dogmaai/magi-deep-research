@@ -18,7 +18,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPrompt } from '../src/fallback.mjs';
-import { stripSection5 } from '../src/strip.mjs';
+import {
+  stripSection5,
+  SECTION5_SENTINEL_BEGIN,
+  SECTION5_SENTINEL_END,
+} from '../src/strip.mjs';
 
 const REQUIRED_HEADINGS = Object.freeze([
   '## 1. Macro',
@@ -82,6 +86,49 @@ describe('buildPrompt() structural contract', () => {
     // cleanly at whitespace / EOL.
     assert.match('## 5. Jun Review Only', /^## 5\. Jun Review Only\b/);
     assert.ok(prompt.includes('`## 5. Jun Review Only`'));
+  });
+
+  it('instructs the model to wrap Section 5 in the sentinel fence', () => {
+    const prompt = buildPrompt();
+    assert.ok(
+      prompt.includes(SECTION5_SENTINEL_BEGIN),
+      'prompt must instruct the BEGIN sentinel verbatim',
+    );
+    assert.ok(
+      prompt.includes(SECTION5_SENTINEL_END),
+      'prompt must instruct the END sentinel verbatim',
+    );
+    // The BEGIN sentinel instruction must precede the END instruction.
+    assert.ok(
+      prompt.indexOf(SECTION5_SENTINEL_BEGIN) <
+        prompt.indexOf(SECTION5_SENTINEL_END),
+    );
+  });
+
+  it('round-trips a §-renumbered, sentinel-fenced Section 5 through stripSection5', () => {
+    // Simulate a live-format model emission: section-sign numbering, a
+    // localized Jun-only heading, bare-ticker picks, AND the sentinel
+    // fence the prompt now requires. The strip must remove it cleanly.
+    const simulatedBrief = [
+      '## §1. Macro',
+      'A',
+      '## §2. Sector',
+      'B',
+      '## §3. Risks',
+      'C',
+      '## §4. Watchlist',
+      '- AAPL: context only',
+      SECTION5_SENTINEL_BEGIN,
+      '## §5. Jun限定レビュー',
+      'AAPL LONG entry 190 stop 185 target 210',
+      SECTION5_SENTINEL_END,
+    ].join('\n');
+    const { stripped, status, leakSuspected } = stripSection5(simulatedBrief);
+    assert.doesNotMatch(stripped, /Jun限定/);
+    assert.doesNotMatch(stripped, /entry 190/);
+    assert.match(stripped, /## §4\. Watchlist/);
+    assert.equal(leakSuspected, false);
+    assert.equal(status, 'success');
   });
 
   it('forbids the model from listing ticker symbols in Section 3 (§2.3 boundary)', () => {

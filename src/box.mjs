@@ -16,8 +16,9 @@
  *
  * Safety invariant (design §2.3):
  *   `markdown` MUST be post-strip. The writer refuses any input
- *   containing `## 5. Jun Review Only` — defense-in-depth behind
- *   `src/bigquery.mjs` and `src/strip.mjs`.
+ *   containing Section 5 (the "Jun Review Only" heading or its sentinel
+ *   fence) — defense-in-depth behind `src/bigquery.mjs` and
+ *   `src/strip.mjs`, sharing the same `containsSection5()` predicate.
  *
  * Auth: the Box SDK supports several auth modes. We rely on the JWT
  * /Server Auth path (`box-node-sdk` BoxSDK.getPreconfiguredInstance()
@@ -27,6 +28,8 @@
  *
  * Design reference: `MAGI-GE-DESIGN-001-v2` §3.1, §5.5, §7.3.
  */
+
+import { containsSection5 } from './strip.mjs';
 
 export const DEFAULT_FOLDER_ID = process.env.BOX_RESEARCH_FOLDER_ID ?? null;
 export const FILE_EXTENSION = '.md';
@@ -60,10 +63,10 @@ function assertStripped(markdown) {
       'box.mjs: markdown must be a string (stripSection5 output)',
     );
   }
-  if (/^## 5\. Jun Review Only\b/m.test(markdown)) {
+  if (containsSection5(markdown)) {
     throw new Error(
-      'box.mjs: markdown still contains "## 5. Jun Review Only". ' +
-        'Call stripSection5() before uploadBrief(). ' +
+      'box.mjs: markdown still contains Section 5 (Jun Review Only heading ' +
+        'or sentinel fence). Call stripSection5() before uploadBrief(). ' +
         'This is a MAGI-GE-DESIGN-001-v2 §2.3 absolute-boundary violation.',
     );
   }

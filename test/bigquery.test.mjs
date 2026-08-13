@@ -152,6 +152,24 @@ describe('buildDeepResearchRow', () => {
     );
   });
 
+  it('throws for a §-renumbered / localized Jun-only heading (§2.3 guard)', () => {
+    const raw =
+      '## §1. Macro\nA\n## §8. Jun Review Only (CONFIDENTIAL)\nAAPL LONG 190 185 210\n';
+    assert.throws(
+      () => buildDeepResearchRow({ ...VALID, strippedSummary: raw }),
+      /absolute-boundary/,
+    );
+  });
+
+  it('throws when a Section 5 sentinel fence survives in the summary (§2.3 guard)', () => {
+    const raw =
+      '## §1. Macro\nA\n<!--MAGI:SECTION5:BEGIN-->\n## §5. Jun限定\nAAPL LONG 1 2 3\n<!--MAGI:SECTION5:END-->\n';
+    assert.throws(
+      () => buildDeepResearchRow({ ...VALID, strippedSummary: raw }),
+      /absolute-boundary/,
+    );
+  });
+
   it('throws TypeError when strippedSummary is not a string', () => {
     assert.throws(
       () => buildDeepResearchRow({ ...VALID, strippedSummary: null }),

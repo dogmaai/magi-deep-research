@@ -39,7 +39,29 @@ Requires Node 20+. Run the test suite with Node's built-in runner.
 
 - PLM (8 LLM Jobs) is NEVER routed through Gemini Enterprise.
 - Vertex AI Gemini API and Gemini Developer API are NEVER replaced.
-- Section 5 (`## 5. Jun Review Only`) — ticker picks, entry, stop,
+- Section 5 (the "Jun Review Only" block) — ticker picks, entry, stop,
   target — MUST NEVER reach the PLM. `strip.mjs` is the contractual
   enforcement point before BigQuery insert; any bypass of this module
   is a violation of the design's absolute boundary.
+
+`strip.mjs` removes Section 5 three ways (defense in depth), so it holds
+for both the Phase B fallback format and the live Phase C format:
+
+1. **Sentinel fence** — `buildPrompt()` instructs the model to wrap
+   Section 5 between `<!--MAGI:SECTION5:BEGIN-->` and
+   `<!--MAGI:SECTION5:END-->`. This is numbering- and
+   language-agnostic and is the primary contract.
+2. **Heading label** — any H2 carrying the "Jun Review Only" label is
+   stripped regardless of section numbering (`## 5.`, `## §5`, …) or a
+   `(CONFIDENTIAL)` trailer. (Real `DAILY_DEEP_RESEARCH` rows use `§`
+   numbering and localized titles, so a literal `## 5. Jun Review Only`
+   match alone would silently no-op.)
+3. **Leak sensor** — after stripping, the residue is scanned for
+   actionable-pick lines (a ticker — `$AAPL` *or* bare `AAPL` — together
+   with a LONG/SHORT direction and/or entry/stop/target levels) and for
+   `$TICKER` density (≥5). Either condition flags `status='partial'`.
+   The legitimate Watchlist (bare tickers in prose) does not trip it.
+
+The same `containsSection5()` predicate backs the writer-boundary guards
+in `bigquery.mjs` and `box.mjs`, so the strip and the guards cannot
+drift apart.
