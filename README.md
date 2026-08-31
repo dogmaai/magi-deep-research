@@ -11,7 +11,14 @@ Design reference: `MAGI-GE-DESIGN-001-v2`.
 
 ## Status
 
-Phase C implementation is wired in `src/deep-research.mjs`.
+**Operational flow:** The weekday daily brief is now generated and
+uploaded by the Devin Automation `MAGI 日次市場ブリーフ投入`
+(`https://app.devin.ai/automations/36ae4174a1f84057a113bcd53fc1d570`),
+which writes to `magi_core.market_research` via
+`magi-core/scripts/upload-deep-research.mjs`. This repository remains
+the historical/reference implementation of the Cloud Run Job design.
+
+The original Phase C implementation is wired in `src/deep-research.mjs`.
 `src/index.mjs` can run in `MAGI_BRIEF_MODE=deep-research` to call the
 Gemini Enterprise `streamAssist` API with `agentId=deep_research` and
 Magi BigQuery-backed data stores as the grounding corpus. Phase B
